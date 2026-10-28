@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+config.toml
+_foran_work/
+*.fsf
+*.fsm
+*.db
+*.lis
+*.dxf
+*.dwg
+*.fds
+*.lic
+*.jrnl.csv
+/out/
+/work/

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "foran-skill"
+version = "0.1.0"
+description = "Automation and documentation layer for SENER FORAN"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+gui = ["pywinauto>=0.6.9", "pyautogui>=0.9.54", "Pillow>=10.0", "pyperclip>=1.8"]
+dxf = ["ezdxf>=1.4", "openpyxl>=3.1"]
+vision = ["opencv-python-headless>=4.8"]
+brep = ["gmsh>=4.15"]

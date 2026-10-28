@@ -1,0 +1,23 @@
+FORAN skill — NOTICE
+
+FORAN is a commercial ship-design software suite by SENER Ingeniería y
+Sistemas, S.A. This project is an independent automation layer. It is not
+affiliated with, endorsed by, or supported by SENER.
+
+Scope
+- No FORAN binaries, installers, license files, help files, compiled API dumps
+  or project databases are distributed with this repository.
+- You must obtain and license FORAN separately, and comply with its EULA when
+  using these scripts.
+
+Documentation
+- Documentation here is original text based on hands-on use; no SENER
+  documentation is reproduced. FORAN menu and command names are used
+  descriptively, for interoperability only.
+
+No warranty
+- The software is provided "as is", without warranty of any kind. Engineering
+  results must be checked by a qualified engineer before use in design or
+  production.
+
+Trademarks remain the property of their respective owners.

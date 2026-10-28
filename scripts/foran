@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# FORAN skill launcher. Prefers a venv next to the skill, falls back to python.
+set -u
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_ROOT="$(cd "$HERE/.." && pwd)"
+
+PY="${FORAN_PY:-}"
+if [ -z "$PY" ]; then
+  for cand in \
+    "$SKILL_ROOT/.venv/Scripts/python.exe" \
+    "$SKILL_ROOT/../../../.venv/Scripts/python.exe"; do
+    if [ -x "$cand" ]; then PY="$cand"; break; fi
+  done
+fi
+if [ -z "$PY" ]; then
+  PY="$(command -v python || command -v python3 || true)"
+fi
+if [ -z "$PY" ]; then
+  echo "python not found; set FORAN_PY to a Python interpreter" >&2
+  exit 3
+fi
+
+export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
+exec "$PY" -I "$HERE/foran_cli.py" "$@"

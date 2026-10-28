@@ -1,0 +1,14 @@
+# GUI automation only. The DB / journal / launch scripts are stdlib-only.
+# Install into an isolated venv:
+#   python -m venv .venv
+#   .venv\Scripts\python.exe -m pip install -r requirements.txt
+pywinauto>=0.6.9
+pyautogui>=0.9.54
+Pillow>=10.0
+pyperclip>=1.8
+# template matching for FORAN's custom-painted tabs/icons (`foran vision`)
+opencv-python-headless>=4.8
+# optional: `foran fga brep --box L,W,H` generates a BREP via OpenCASCADE
+gmsh>=4.15
+ezdxf>=1.4
+openpyxl>=3.1

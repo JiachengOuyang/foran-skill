@@ -1,0 +1,35 @@
+{
+  "skill_name": "foran",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Check my FORAN environment and tell me if the launcher and Python dependencies are ready.",
+      "expected_output": "Runs `foran env check` and `foran selftest`; reports install_dir, launcher, license_file status and any missing GUI dependencies without modifying project data.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Generate a hull with Lpp=150 m, B=22 m, T=8 m, D=12 m, Cb=0.78, including lines drawing and hydrostatics.",
+      "expected_output": "Runs `foran hull gen --lpp 150 --breadth 22 --draught 8 --depth 12 --cb 0.78 --brep`; writes sections.json, lines.svg, hydro.json, report.md and hull.brep; achieved Cb within tolerance.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Put this lines DXF on an A1 sheet with a title block and save it as framed.dxf.",
+      "expected_output": "Runs `foran dxf frame --in lines.dxf --out framed.dxf --sheet A1 --fit --project ... --title ... --drawing-no ...`; output contains a border, title block and the original geometry.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Read this FORAN loftbook .lis and export a 21-station offset table plus section-area curve.",
+      "expected_output": "Runs `foran offsets export --lis offsets.lis --out-prefix out/sample --stations 21`; writes CSV/XLSX table and SVG/PNG area curve; reports integrated volume.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "On a copy of my project database, create a closed box compartment 20x10x8 in the CARGO node and export the compartment list.",
+      "expected_output": "Runs `foran db copy` first, then `foran fga brep --box 20,10,8 --node CARGO` and `foran fga spaces`; TSV contains volume 1600.000 and correct COG/bbox.",
+      "files": []
+    }
+  ]
+}

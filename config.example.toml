@@ -1,0 +1,31 @@
+# FORAN skill 配置示例。复制为 config.toml 后按自己的机器填写。
+# 不要把真实的 license_file、项目路径或个人信息提交到 GitHub。
+
+[foran]
+install_dir = "C:/Program Files/FORAN/V80R3.0"
+wrapper_dir = ""                 # 可选：你自己的 FORAN 启动 bat 所在目录
+license_file = ""                # 必填：本地 .lic 路径；不提交真实值
+projects_dir = "C:/FORAN/projects"
+workdir = "."
+
+[gui]
+width = 1920
+height = 1080
+dpi_scale = 1.0                  # 点击坐标按此缩放；非 1920x1080 需重新校准
+click_settle = 0.3               # 每次点击后的等待秒数
+
+[deliver]
+# 以下仅示例 profile 使用；不要填真实人员与图号。
+mother_fsf = "/path/to/mother.fsf"
+drawing_no = "EXAMPLE-010-04"
+title = "Lines"
+author = "AUTHOR"
+designer = "DESIGNER"
+checker = "CHECKER"
+approver = "APPROVER"
+company = "YOUR COMPANY"
+sheet = "A0"
+scale = 300
+stations = 21
+max_waterline = 14.5
+titleblock_dxf = ""
