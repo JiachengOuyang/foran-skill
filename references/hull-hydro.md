@@ -101,7 +101,7 @@ Cb = ∇/(Lpp·B·T), Cp = ∇/(Am·Lpp), Cm = Am/(B·T), Cwp = Awp/(Lwl·Bwl)
 
 ## 3. 与 FORAN 的衔接
 
-- `hull.brep`/`hull.step` 可用 `foran fga brep --brep ... --node CARGO` 导入 FGA，作为一个闭合 space（实测 volume=60,752.809、bbox x0..172/y±14.4/z0..14.6）。
+- `hull.brep` 可用 `foran fga brep --brep ... --node CARGO` 导入 FGA，作为一个闭合 space（实测 volume=60,752.809、bbox x0..172/y±14.4/z0..14.6）。`hull.step` 也能导入，但 2026-11-01 实测 STEP 路径体积为 0，命令默认拒绝；要用需加 `--allow-step`，结果不可信。
 - **FSURF 导入已试通一半**：`File > Import > Import/Merge` 的文件类型支持 `*.fsf`、`*.dkbh`、`*.nsrf`、`*.srf`、`*.srfa...`、**`*.igs`**、**`*.stp`**、**`*.brep`**、`*.cur`、`*.pol`。用 IGES 和 BREP 都能把生成的船体读进 FSURF 场景。
 - **第一次导入（实体）**：Work Space 里有 **862 个 patch**；Manager 里把 `Surface Entities` 组直接拖到 `External Hull` 会报 `Can't add this kind of object.`，只能逐个 patch 拖（862 个不现实）。
 - **第二次导入（低 patch 壳）**：用 `nz=4` 的粗截面 + `makeSolid=False, makeRuled=False` 生成 **11 个 patch** 的 `hull_shell.brep`；FSURF 能打开，Build Ship 也能填字段并通过 Surface Validator（Duplicated/Lines 用 `Analyze all surfaces`），但点 `Finish` 后报 **`Ship has not correctly assembled`**。原因是这些 patch 还在 Work Space，没有分配到 External Hull。

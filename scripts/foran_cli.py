@@ -21,8 +21,24 @@
   python foran_cli.py draw --fsf model.fsf --out lines.dxf
   python foran_cli.py gui fill-db --project sample.db --fnam sample --yes
   python foran_cli.py selftest [--db sample.db] [--json]
+  python foran_cli.py test                     # offline unit tests
+  python foran_cli.py doctor --db sample.db    # preflight before a long run
 """
 from __future__ import annotations
+
+# Make the process DPI-aware before pyautogui/pywinauto compute coordinates.
+# On a 1920x1080 screen at 150% scaling, a DPI-unaware process sees 1280x720
+# and every menu click lands at 2/3 of the intended position.
+import os
+if os.name == "nt":
+    try:
+        import ctypes
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)  # per-monitor
+        except Exception:
+            ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 
 import importlib
 import sys
@@ -30,6 +46,28 @@ from pathlib import Path
 
 # `python -I` implies a safe sys.path (no script directory), so add it explicitly.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+
+def _warn_dotted_foran_names(argv: list[str]) -> None:
+    """FORAN reads the extension from the first dot.
+
+    ``model_v1.0_work.fsf`` is seen as ``.0_work.fsf`` and rejected with
+    ``DsgAuxFileReader ERROR : Unknown file extension``.  Warn before a long
+    GUI run instead of letting the user discover it halfway through.
+    """
+    from foran_names import has_extra_dots, suggest_foran_name
+
+    seen: set[str] = set()
+    for tok in argv:
+        val = tok.split("=", 1)[1] if tok.startswith("--") and "=" in tok else tok
+        name = Path(val).name
+        low = name.lower()
+        if low.endswith((".fsf", ".db")) and has_extra_dots(name) and name not in seen:
+            seen.add(name)
+            print(f"warning: {name!r} contains an extra '.'; FORAN parses the "
+                  f"extension from the first dot and may reject it. Rename to "
+                  f"{suggest_foran_name(name)}.", file=sys.stderr)
+
 
 COMMANDS = {
     "env": "foran_env",
@@ -52,6 +90,8 @@ COMMANDS = {
     "fdm": "foran_fdm",
     "offsets": "foran_offsets",
     "selftest": "foran_selftest",
+    "test": "foran_tests",
+    "doctor": "foran_doctor",
 }
 
 
@@ -64,6 +104,7 @@ def main() -> int:
     if cmd not in COMMANDS:
         print(f"unknown command {cmd!r}; choose from {', '.join(COMMANDS)}", file=sys.stderr)
         return 2
+    _warn_dotted_foran_names(sys.argv[2:])
     mod = importlib.import_module(COMMANDS[cmd])
     return mod.main(sys.argv[2:])
 

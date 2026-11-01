@@ -47,6 +47,19 @@ except Exception as exc:  # noqa: BLE001
     raise SystemExit(3)
 
 
+def _safe_stem(stem: str) -> str:
+    """Sanitize a source stem for FORAN's file dialog.
+
+    DsgAuxFileReader parses the extension from the first dot after the last
+    path separator, so a working copy named ``model_v0.1_work.fsf`` is seen as
+    extension ``.1_work.fsf`` and rejected with "Unknown file extension".
+    Keep the work copy dot-free.
+    """
+    from foran_names import foran_safe_stem
+
+    return foran_safe_stem(stem)
+
+
 # ---------------------------------------------------------------- launch
 def _launch_fsurf(workdir: Path) -> subprocess.Popen:
     info = E.module_info("fsurf")
@@ -802,7 +815,7 @@ def cmd_offsets(a) -> int:
         Path.cwd() / "_foran_work" / "fsf" /
         f"offsets_{dt.datetime.now():%Y%m%d-%H%M%S}")
     workdir.mkdir(parents=True, exist_ok=True)
-    model = workdir / f"{src.stem}_work{src.suffix}"
+    model = workdir / f"{_safe_stem(src.stem)}_work{src.suffix}"
     shutil.copy2(src, model)
     if D.find_hwnd("fsurf -", timeout=0.2) is not None:
         print("FSURF is already running; close it first.", file=sys.stderr)
@@ -1071,10 +1084,10 @@ def cmd_bulkheads(a) -> int:
         Path.cwd() / "_foran_work" / "fsf" /
         f"bulkheads_{dt.datetime.now():%Y%m%d-%H%M%S}")
     workdir.mkdir(parents=True, exist_ok=True)
-    model = workdir / f"{src.stem}_work{src.suffix}"
+    model = workdir / f"{_safe_stem(src.stem)}_work{src.suffix}"
     shutil.copy2(src, model)
     out = (Path(a.out).expanduser().resolve() if a.out
-           else workdir / f"{src.stem}_bulkheads{src.suffix}")
+           else workdir / f"{_safe_stem(src.stem)}_bulkheads{src.suffix}")
     if D.find_hwnd("fsurf -", timeout=0.2) is not None:
         print("FSURF is already running; close it first.", file=sys.stderr)
         return 2
@@ -1635,10 +1648,10 @@ def cmd_decks(a) -> int:
         Path.cwd() / "_foran_work" / "fsf" /
         f"decks_{dt.datetime.now():%Y%m%d-%H%M%S}")
     workdir.mkdir(parents=True, exist_ok=True)
-    model = workdir / f"{src.stem}_work{src.suffix}"
+    model = workdir / f"{_safe_stem(src.stem)}_work{src.suffix}"
     shutil.copy2(src, model)
     out = (Path(a.out).expanduser().resolve() if a.out
-           else workdir / f"{src.stem}_decks{src.suffix}")
+           else workdir / f"{_safe_stem(src.stem)}_decks{src.suffix}")
     if D.find_hwnd("fsurf -", timeout=0.2) is not None:
         print("FSURF is already running; close it first.", file=sys.stderr)
         return 2
@@ -1700,10 +1713,10 @@ def cmd_inner_shell(a) -> int:
         Path.cwd() / "_foran_work" / "fsf" /
         f"inner_{dt.datetime.now():%Y%m%d-%H%M%S}")
     workdir.mkdir(parents=True, exist_ok=True)
-    model = workdir / f"{src.stem}_work{src.suffix}"
+    model = workdir / f"{_safe_stem(src.stem)}_work{src.suffix}"
     shutil.copy2(src, model)
     out = (Path(a.out).expanduser().resolve() if a.out
-           else workdir / f"{src.stem}_inner{src.suffix}")
+           else workdir / f"{_safe_stem(src.stem)}_inner{src.suffix}")
     if D.find_hwnd("fsurf -", timeout=0.2) is not None:
         print("FSURF is already running; close it first.", file=sys.stderr)
         return 2
@@ -1829,10 +1842,10 @@ def cmd_hopper(a) -> int:
         Path.cwd() / "_foran_work" / "fsf" /
         f"hopper_{dt.datetime.now():%Y%m%d-%H%M%S}")
     workdir.mkdir(parents=True, exist_ok=True)
-    model = workdir / f"{src.stem}_work{src.suffix}"
+    model = workdir / f"{_safe_stem(src.stem)}_work{src.suffix}"
     shutil.copy2(src, model)
     out = (Path(a.out).expanduser().resolve() if a.out
-           else workdir / f"{src.stem}_hopper{src.suffix}")
+           else workdir / f"{_safe_stem(src.stem)}_hopper{src.suffix}")
     if D.find_hwnd("fsurf -", timeout=0.2) is not None:
         print("FSURF is already running; close it first.", file=sys.stderr)
         return 2
@@ -1899,10 +1912,10 @@ def cmd_upper_tank(a) -> int:
         Path.cwd() / "_foran_work" / "fsf" /
         f"uppertank_{dt.datetime.now():%Y%m%d-%H%M%S}")
     workdir.mkdir(parents=True, exist_ok=True)
-    model = workdir / f"{src.stem}_work{src.suffix}"
+    model = workdir / f"{_safe_stem(src.stem)}_work{src.suffix}"
     shutil.copy2(src, model)
     out = (Path(a.out).expanduser().resolve() if a.out
-           else workdir / f"{src.stem}_uppertank{src.suffix}")
+           else workdir / f"{_safe_stem(src.stem)}_uppertank{src.suffix}")
     if D.find_hwnd("fsurf -", timeout=0.2) is not None:
         print("FSURF is already running; close it first.", file=sys.stderr)
         return 2
@@ -2017,11 +2030,11 @@ def cmd_workflow(a) -> int:
         Path.cwd() / "_foran_work" / "fsf" /
         f"workflow_{dt.datetime.now():%Y%m%d-%H%M%S}")
     workdir.mkdir(parents=True, exist_ok=True)
-    model = workdir / f"{src.stem}_work{src.suffix}"
+    model = workdir / f"{_safe_stem(src.stem)}_work{src.suffix}"
     shutil.copy2(src, model)
     out = (Path(a.out).expanduser().resolve() if a.out
-           else workdir / f"{src.stem}_workflow{src.suffix}")
-    fnam = (a.fnam or src.stem[:4]).upper()
+           else workdir / f"{_safe_stem(src.stem)}_workflow{src.suffix}")
+    fnam = (a.fnam or _safe_stem(src.stem)[:4]).upper()
     if len(fnam) != 4:
         raise SystemExit("--fnam must be exactly 4 characters")
     sx = float(a.scale_x) if a.scale_x else float(a.lpp) / float(a.from_lpp)
@@ -2204,11 +2217,11 @@ def cmd_transform(a) -> int:
         Path.cwd() / "_foran_work" / "fsf" /
         f"transform_{dt.datetime.now():%Y%m%d-%H%M%S}")
     workdir.mkdir(parents=True, exist_ok=True)
-    model = workdir / f"{src.stem}_work{src.suffix}"
+    model = workdir / f"{_safe_stem(src.stem)}_work{src.suffix}"
     shutil.copy2(src, model)
     out = (Path(a.out).expanduser().resolve() if a.out
-           else workdir / f"{src.stem}_transform{src.suffix}")
-    fnam = (a.fnam or src.stem[:4]).upper()
+           else workdir / f"{_safe_stem(src.stem)}_transform{src.suffix}")
+    fnam = (a.fnam or _safe_stem(src.stem)[:4]).upper()
     if len(fnam) != 4:
         raise SystemExit("--fnam must be exactly 4 characters (e.g. SAMPLE)")
 

@@ -101,6 +101,8 @@ $S fga import-hull --db <sample.db> --fsf TESTfsurf.fsf --copy
 - 新 hull 与旧线几何差异很大时，回填的旧线不一定匹配（尤其 `BULWALK`/`DECK_INTER`）；可先 `--no-restore-lines`，再在 FSURF/FGA 里重建线。
 - 如果导入的是**开放壳**（例如 `hull gen` 的 `makeSolid=False` 壳），FGA 表面能导入，但 FBASIC `Build WH` 可能无法闭合成实体，且会删掉原来的主船体实体。需要闭合壳（带甲板/端封）或改用其他方法。
 
+**只换曲面，不换实体剖面（2026-11-01 实测）**：`import-hull` 更新的是 `DSG_GSF_TREE` 里的 FGA 曲面；`DSG_SOLID_HULL_SECTIONS` 和 `DSG_HYD_CALC_DATA` 仍是旧项目的数据。导入新模型后 FBASIC 静水力仍按旧 Lpp 172 m 算（∇@9.83 = 40,373.6 m³）。要真正换成新船，需先用闭合整船空间在 FBASIC `WH` 里重建剖面，再更新主尺度；完成前这个库只能查舱室体积/重心/出 GA。
+
 ### 3.2 加载 IGS/STP（外部格式）
 
 1. 选 `.igs` / `.stp`。
@@ -235,6 +237,8 @@ $S fga import-hull --db <sample.db> --fsf TESTfsurf.fsf --copy
    - 中间图纸区；顶部工具条画线/圆/编辑；
    - `Layers`：图层 0/1/2/3 系统专用，**用户对象必须放图层 4**，否则重新 `Arrange drawing` 会被删；
    - `Blocks`、`Properties`、`Libraries`（用户图库，dxf/e2，可拖入）。
+
+**`fga draw` 输出范围（2026-11-01 实测）**：`2D draw` 面板加入 Plan 视图后，右侧会出现 Decks / Bulkheads / Superstructure / Spaces 四类（Width 默认 1，`--dump-panel` 可打印控件树）；但实测导出的 DXF 顶层只有 18 个实体、11 个块引用，舱壁和货舱分隔线没有以可读线出现。正式分舱图仍需补 Working Deck / space contours 或 AutoCAD。
 
 ### 5.4 完善图纸
 
@@ -389,7 +393,11 @@ bbox   = x 0..20 / y 0..10 / z 0..8
 area   = 880 m²（= 2·(20·10+20·8+10·8)，正确）
 ```
 
-这是目前**最可靠的闭合舱室路径**：任意 CAD/脚本生成的封闭实体（货舱、压载舱、设备包围体）都可以 STEP/BREP 导入。六限界仍适合在“有完整封闭船体+舱壁”的模型上使用。
+这是目前**最可靠的闭合舱室路径**：任意 CAD/脚本生成的封闭实体（货舱、压载舱、设备包围体）都可以用 **BREP** 导入（STEP 实测体积为 0）。六限界仍适合在“有完整封闭船体+舱壁”的模型上使用。
+
+**格式选择（2026-11-01 实测，重要）**：同一实体分别导出 `.step` 和 `.brep` 导入，**STEP 路径体积/重心全为 0**，**BREP 路径正常**。以后一律用 `.brep`；`foran fga brep` 默认拒绝 STEP/IGES，需 `--allow-step` 才尝试。
+
+**批量导入（2026-11-01 实测）**：`--brep-dir` 在同一次 FGA 会话里对目录下每个实体重复 “New space → Imported → 选文件 → Save & Exit”。实测两个 box 一次导入 → `SPC-0007` 125 m³、`SPC-0008` 27 m³，EXIT=0。
 
 一键版本（`foran fga brep`）：
 
@@ -411,13 +419,31 @@ $S fga brep --db "D:/.../sample.db" --box 20,10,8 --node CARGO --copy
 
 命令会自己完成锁树、Set active、New space、Imported 文件选择、Save and Exit、保存项目，并打印新舱室名/OID。
 
-### 8.2 六限界最终结论（2026-10-27）
+### 8.3 六限界最终结论（2026-10-27）
 
 - **开放壳**（11 patch）：`Recalculation of subspace(s) ... failed`。
 - **闭合 IGES**（hull.igs，77 patch）：`Shape analyzer` 仍有 2 个 `Free edges → Closed wire`；`Fix shape` 容差 0.0005/0.01/0.1 都补不上。
 - **FSURF 13 面闭合壳**（11 侧面 + 艏艉封盖 → `foran fsf build` → FSF → FGA import-hull）：FGA 里只有 11 patch，但 **无 Free edges**，只报 `Overlapped edges`；`Fix shape` 无法消除。
 - 六限界行填对（数据行 **y≈793–822**；Aft x≈589–688；`x50–80 / y±4 / z2–8`）后，`Build Space` 仍报 `Recalculation failed`；尝试 `Extern` 列也无效。
-- 结论：六限界被 FORAN 的 patch 重叠/重算逻辑卡住，不是缺端面；继续调坐标/容差收益低。**替代方案**：参数化子舱室、`foran fga brep` 导入 BREP/STEP/IGES 实体。
+- 结论：六限界被 FORAN 的 patch 重叠/重算逻辑卡住，不是缺端面；继续调坐标/容差收益低。**替代方案**：参数化子舱室、`foran fga brep` 导入 BREP 实体。
+
+### 8.4 空间面板按钮（2026-10-28）
+
+- `New space` 之后的空间定义面板有一排无名称的 QToolButton：`Save & Exit` 是整行最左边的图标，`Imported` 页的绿色 `+` 是面板组里第一个绿色图标。
+- `cmd_brep` 现在按结构定位：先找 `Summary/Six limits/Surfaces set/Imported/Parametric` 标签栏，取标签栏上方 30 px 内的空文本按钮；最左为 `Save & Exit`，面板组内用像素颜色找绿色 `+`。
+- UIA 失败时才回退到旧坐标 `(14,710)` / `(470,710)`，并打印提示。
+- 回归：`fga brep --box 5,5,5` → `SPC-0011`，EXIT=0，无回退告警。
+
+### 8.5 总布置图自动化（2026-10-28）
+
+- `Tools` 菜单项可枚举：`New node / Edit node / Delete node / New drawing / Edit drawing / Delete drawing / Open drawing / Arrange drawing / Rearrange items`。
+- 菜单栏本身仍用坐标打开（`(482,65)` 相对窗口），但 `New drawing` / `Arrange drawing` 已按 UIA 名称点击。
+- `Ship` 根节点与新建的图纸行都按 TreeItem 名称选择；图纸名取对话框里的实际值（如 `DRAW-0002`）。
+- 2D 上下文里的 `Save as / Save drawing / Exit 2D context` 也改为按 UIA 名称点击，并使用 `popup_first=True`（同名菜单项优先取当前打开的 QPopup，避免命中主窗口的隐藏项）。
+- 只有“打开菜单栏”这一步仍用窗口相对坐标（`_menu(G, win, x, y)`）；FGA 里 UIA 直接点菜单栏不可靠。
+- 实测（sample 副本）：DXF 394,605 B，EXIT=0。
+- **三维视口全黑（2026-11-01）**：树和库都正常时视口仍全黑，判断为本机 OpenGL/硬件加速问题；用 `foran fga spaces/tree`、GA DXF 或工程树截图代替。
+- **常见失败**：`The surfaces tree hasn't the information about the contour lines`——该库没有型表面轮廓信息（例如只有吨位数据的副本），GA 图无法生成；换带船体表面的库（如 sample）。
 
 ## 9. 命令速查
 
@@ -430,20 +456,3 @@ $S fga brep --db "D:/.../sample.db" --box 20,10,8 --node CARGO --copy
 - 2D 绘图工具；
 - Tools/Standards；
 - 三条典型工作流（3D 建舱室、2D 建舱室、生成 GA 图）。
-
-### 8.2 空间面板按钮（2026-10-28）
-
-- `New space` 之后的空间定义面板有一排无名称的 QToolButton：`Save & Exit` 是整行最左边的图标，`Imported` 页的绿色 `+` 是面板组里第一个绿色图标。
-- `cmd_brep` 现在按结构定位：先找 `Summary/Six limits/Surfaces set/Imported/Parametric` 标签栏，取标签栏上方 30 px 内的空文本按钮；最左为 `Save & Exit`，面板组内用像素颜色找绿色 `+`。
-- UIA 失败时才回退到旧坐标 `(14,710)` / `(470,710)`，并打印提示。
-- 回归：`fga brep --box 5,5,5` → `SPC-0011`，EXIT=0，无回退告警。
-
-### 8.3 总布置图自动化（2026-10-28）
-
-- `Tools` 菜单项可枚举：`New node / Edit node / Delete node / New drawing / Edit drawing / Delete drawing / Open drawing / Arrange drawing / Rearrange items`。
-- 菜单栏本身仍用坐标打开（`(482,65)` 相对窗口），但 `New drawing` / `Arrange drawing` 已按 UIA 名称点击。
-- `Ship` 根节点与新建的图纸行都按 TreeItem 名称选择；图纸名取对话框里的实际值（如 `DRAW-0002`）。
-- 2D 上下文里的 `Save as / Save drawing / Exit 2D context` 也改为按 UIA 名称点击，并使用 `popup_first=True`（同名菜单项优先取当前打开的 QPopup，避免命中主窗口的隐藏项）。
-- 只有“打开菜单栏”这一步仍用窗口相对坐标（`_menu(G, win, x, y)`）；FGA 里 UIA 直接点菜单栏不可靠。
-- 实测（sample 副本）：DXF 394,605 B，EXIT=0。
-- **常见失败**：`The surfaces tree hasn't the information about the contour lines`——该库没有型表面轮廓信息（例如只有吨位数据的副本），GA 图无法生成；换带船体表面的库（如 sample）。

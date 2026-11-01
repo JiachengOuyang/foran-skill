@@ -14,7 +14,7 @@ calculations.
 
 | Area | Commands |
 |---|---|
-| Environment | `foran setup`, `foran env check`, `foran selftest` |
+| Environment | `foran setup`, `foran env check`, `foran selftest`, `foran test`, `foran doctor` |
 | Project DB (read-only) | `foran db check/tables/schema/query/hydro/search/copy` |
 | Launch | `foran launch fbasic/fga/fsurf/fdm` |
 | FBASIC | `foran fbasic wh/hydro/cross/capacity/freeboard/tonnage/lsw/lc` |
@@ -66,6 +66,8 @@ python scripts/foran_cli.py env check
 foran setup          # 首次使用：写 config.toml 并检查环境
 foran env check
 foran selftest --db C:/FORAN/projects/sample.db
+foran test
+foran doctor --db C:/FORAN/projects/sample.db
 foran db check C:/FORAN/projects/sample.db
 foran launch fsurf --workdir ./work/fsurf
 foran hull gen --lpp 150 --breadth 22 --draught 8 --depth 12 --cb 0.78 --out ./out/hull

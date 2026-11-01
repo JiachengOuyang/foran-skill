@@ -19,11 +19,13 @@ foran journal summary --latest
 | `Database X is locked` | 库在只读/U 盘位置，或另一进程占用 | 复制到本地可写目录再开；关闭其他打开该库的模块 |
 | `Database from an older FORAN version...` | 库版本旧 | 允许更新（先备份）；若库比 V80R3.0 新，需要更高版本 FORAN |
 | `Database %1 not found.` | 路径写错或文件被移走 | 用绝对路径；先 `foran db check` |
+| `DsgAuxFileReader ERROR : Unknown file extension` | 文件名在扩展名前还有别的点（`model_v0.1_work.fsf` 被当成 `.1_work.fsf`） | 文件名只用字母/数字/下划线/短横，版本写成 `v1_0`；CLI 会提前告警 |
 | `fsurf` 标题没有 许可信息 | 许可没读到 | 检查 `LM_LICENSE_FILE` 是否是 FORAN 的 `.lic`；用包装脚本 |
 | 库打开后查询不到数据 | 打开的是空库/错库 | `foran db check` + `foran db tables --filter ...` |
 | 宏菜单里看不到新宏 | 菜单没刷新 / 文件不在工作目录 | `Tools > Macros > Refresh menu`；确认工作目录（快捷方式 Start in） |
 | GUI 自动化 `controls` 看不到控件 | Qt 窗口对 UIA 暴露不完整 | 换 `--backend win32`；或退回截图 + 坐标点击 |
 | 截图全黑 | OpenGL/硬件加速窗口抓不到 | 先尝试全屏截图；再用 `Print Screen` 对比；必要时关硬件加速 |
+| FGA 三维视口全黑，但树/库正常 | 本机 OpenGL/硬件加速问题，不是模型缺失 | 不要反复 Zoom/Shading；用 `foran fga spaces/tree` 读库、GA DXF 或工程树截图代替 |
 | `UIA` 报权限错误 | FORAN 以管理员运行，脚本没有 | 用同样权限运行脚本；或改为手工操作 |
 
 ## 1. 许可（最常见）

@@ -294,6 +294,31 @@ def cmd_hydro(a) -> int:
     return 0
 
 
+def copy_for_work(src: Path, dest_dir: Path) -> Path:
+    """Copy `src` into `dest_dir` for a GUI run.
+
+    If the source is already inside `dest_dir` (the common case after a first
+    `--copy`), copying it onto itself would make FORAN open the archive in
+    place.  Use a stamped sibling instead so the original stays untouched.
+    """
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    src = src.resolve()
+    dest = dest_dir / src.name
+    if dest.resolve() == src:
+        stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+        dest = dest_dir / f"{src.stem}_{stamp}{src.suffix}"
+        n = 1
+        while dest.exists():
+            n += 1
+            dest = dest_dir / f"{src.stem}_{stamp}_{n}{src.suffix}"
+    elif not dest.exists() or dest.stat().st_mtime < src.stat().st_mtime:
+        shutil.copy2(src, dest)
+        return dest
+    if not dest.exists():
+        shutil.copy2(src, dest)
+    return dest
+
+
 def cmd_copy(a) -> int:
     src = Path(a.db).expanduser().resolve()
     if not src.exists():

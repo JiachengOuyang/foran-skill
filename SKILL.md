@@ -31,6 +31,12 @@ foran env check
 foran selftest --db <db>
 # 加 --gui 会额外启动并关闭 FDM 与 FSURF（约 30 s）
 # 加 --fbasic <db> 会复制该库、启动 FBASIC 选库并关闭（约 30 s）
+
+# 离线单元测试（文件名规则、型值表积分、静水力几何、FGA 读库、交付包校验）
+foran test
+
+# 长任务前预检：环境/许可/残留进程/库/磁盘/DPI（不启动 GUI）
+foran doctor --db <db>
 ```
 
 - `status: OK` 才继续。
@@ -83,6 +89,8 @@ $S db check "<db>"
 
 # 复制到工作目录（改写前必做）
 $S db copy "<db>" --out-dir ".\_foran_work\projects"
+# 各 GUI 命令的 --copy：源库若已在 projects/，会生成 <名>_<时间戳>.db 新副本，
+# 不会把原库当工作副本打开
 
 # 静水力 + Cb/Cp 口径
 $S db hydro "<db>"
@@ -303,3 +311,7 @@ python -m venv .venv
 - Qt 控件对 UIA 的暴露程度因模块/版本而异；必要时退回截图 + 坐标。
 - `-fnam` 传库路径未验证；默认让 GUI 弹框选库。
 - 项目库的表很多且可能为空；不要凭表名猜数据。
+- **FORAN 文件名不能有额外的点（2026-10-31 实测）**：FORAN 从**第一个点**解析扩展名，`model_v0.1_work.fsf` 会被当成 `.1_work.fsf` 并报 `DsgAuxFileReader ERROR : Unknown file extension`。文件名只用字母/数字/下划线/短横，版本写 `v1_0`。`foran_fsf` / `foran_draw` 已用 `_safe_stem` 清洗；CLI 对 `.fsf/.db` 路径提前告警。
+- **`fga import-hull` 只换 FGA 曲面（2026-11-01）**：`DSG_SOLID_HULL_SECTIONS` / `DSG_HYD_CALC_DATA` 仍是旧船的数据。实测导入新模型后，FBASIC 静水力仍按母型 Lpp 172 m、∇40,373.6 算。要更新实体剖面，得用 FBASIC WH（选一个闭合的整船空间）重建；在完成前不要把该库用于静水力/稳性。命令结束时会打印 sections 范围和警告。
+- **`fga draw` 的 DXF 仍很空（2026-11-01）**：2D draw 面板里 Decks/Bulkheads/Superstructure/Spaces 四类都在（Width 默认 1，`--dump-panel` 可看控件树），但实测导出 DXF 顶层只有 18 个实体、11 个块引用，舱壁和货舱分隔线没有以可读线出现。正式分舱图仍需补 Working Deck / space contours 或 AutoCAD。
+- **FGA 三维视口全黑**：本机 OpenGL/硬件加速问题；树和库正常时不要反复 Zoom/Shading，直接用 `foran fga spaces/tree`、GA DXF 或工程树截图。

@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import foran_names as N  # noqa: E402
 import foran_env as E  # noqa: E402
 import foran_ui as UI  # noqa: E402
 
@@ -828,7 +829,7 @@ def build_then_draw(a, src: Path, out: Path, shadow: Path) -> int:
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     models = Path.cwd() / "_foran_work" / "models"
     models.mkdir(parents=True, exist_ok=True)
-    model_copy = models / f"{src.stem}_{stamp}.fsf"
+    model_copy = models / f"{N.foran_safe_stem(src.stem)}_{stamp}.fsf"
     shutil.copy2(src, model_copy)
 
     build_run = Path.cwd() / "_foran_work" / "draw_runs" / f"{stamp}_build"
@@ -1032,7 +1033,7 @@ def main(argv=None) -> int:
     run_dir = Path.cwd() / "_foran_work" / "draw_runs" / stamp
     models = Path.cwd() / "_foran_work" / "models"
     models.mkdir(parents=True, exist_ok=True)
-    model_copy = models / f"{src.stem}_{stamp}.fsf"
+    model_copy = models / f"{N.foran_safe_stem(src.stem)}_{stamp}.fsf"
     shutil.copy2(src, model_copy)
     if not launch_fsurf_open(model_copy, run_dir):
         print("FSURF launch/open failed", file=sys.stderr)

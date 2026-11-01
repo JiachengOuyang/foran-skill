@@ -23,6 +23,8 @@ FORAN or a license.
    ```bash
    foran env check
    foran selftest
+   foran test
+   foran doctor
    ```
 
 ## New computer without FORAN / license

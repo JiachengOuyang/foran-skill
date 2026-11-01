@@ -104,14 +104,58 @@ def _match_one(title: str | None, hwnd: int | None, all_windows: bool = False):
     return hits if all_windows else hits[0]
 
 
-def _focus(hwnd: int):
+def foreground_hwnd() -> int:
+    try:
+        return int(win32gui.GetForegroundWindow())
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _focus(hwnd: int) -> bool:
+    """Bring `hwnd` to the foreground; return True only if it really is.
+
+    SetForegroundWindow is refused when another process owns the foreground
+    (Windows focus-stealing rule), so also attach to the current foreground
+    thread while calling it.  Callers that click blindly should use
+    `ensure_foreground` instead of assuming this worked.
+    """
+    if not hwnd:
+        return False
     try:
         if win32gui.IsIconic(hwnd):
             win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-        win32gui.SetForegroundWindow(hwnd)
+        if win32gui.GetForegroundWindow() == hwnd:
+            return True
+        fg = win32gui.GetForegroundWindow()
+        my_tid = win32api.GetCurrentThreadId()
+        fg_tid = win32process.GetWindowThreadProcessId(fg)[0] if fg else 0
+        attached = False
+        if fg_tid and fg_tid != my_tid:
+            try:
+                win32process.AttachThreadInput(my_tid, fg_tid, True)
+                attached = True
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            win32gui.BringWindowToTop(hwnd)
+            win32gui.SetForegroundWindow(hwnd)
+        finally:
+            if attached:
+                win32process.AttachThreadInput(my_tid, fg_tid, False)
     except Exception:  # noqa: BLE001
         pass
-    time.sleep(0.3)
+    time.sleep(0.15)
+    return foreground_hwnd() == int(hwnd)
+
+
+def ensure_foreground(hwnd: int, what: str = "") -> bool:
+    """Try twice; print a warning instead of silently clicking elsewhere."""
+    for _ in range(2):
+        if _focus(hwnd):
+            return True
+    print(f"warning: could not bring {what or hex(hwnd)} to the foreground; "
+          f"clicks may land in another window", file=sys.stderr)
+    return False
 
 
 def wait_until(pred, timeout: float = 10.0, interval: float = 0.15) -> bool:
@@ -445,9 +489,9 @@ def cmd_fill_db(a) -> int:
 
 def cmd_focus(a) -> int:
     w = _match_one(a.window, a.hwnd)
-    _focus(w["hwnd"])
-    print(f"focused 0x{w['hwnd']:x} {w['title']}")
-    return 0
+    ok = ensure_foreground(w["hwnd"], w["title"])
+    print(f"{'focused' if ok else 'NOT focused'} 0x{w['hwnd']:x} {w['title']}")
+    return 0 if ok else 1
 
 
 def cmd_wait(a) -> int:

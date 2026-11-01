@@ -240,6 +240,8 @@ $S launch fsurf --workdir ".\_foran_work\fsurf"
 | `.igs` | Patches + 3D curves（IGES） |
 | `.dxf` | 多段线（DXF） |
 
+**文件名规则**：FORAN 从**第一个点**解析扩展名。`model_v0.1_work.fsf` 会被当成 `.1_work.fsf`，打开时报 `DsgAuxFileReader ERROR : Unknown file extension`。文件名只用字母/数字/下划线/短横，版本写 `v1_0`；`foran_fsf` / `foran_draw` 已自动清洗。
+
 ## 7. 静水力特性（FSURF 内）
 
 命令：`Hydrostatic Characteristics`。

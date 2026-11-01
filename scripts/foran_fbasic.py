@@ -74,6 +74,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import foran_db as DB  # noqa: E402
 import foran_ui as UI  # noqa: E402
 
 
@@ -82,11 +83,7 @@ def _prepare_db(a) -> Path:
     if not db.is_file():
         raise SystemExit(f"database not found: {db}")
     if a.copy:
-        dest_dir = Path.cwd() / "_foran_work" / "projects"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / db.name
-        if not dest.exists() or dest.stat().st_mtime < db.stat().st_mtime:
-            shutil.copy2(db, dest)
+        dest = DB.copy_for_work(db, Path.cwd() / "_foran_work" / "projects")
         print(f"database copy: {dest}")
         return dest
     print("note: opening the database in place; use --copy to work on a copy")

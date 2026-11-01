@@ -12,6 +12,7 @@ Commands
   foran fga tree   --db <sample.db> --out tree.tsv   [--copy]
   foran fga export --db <sample.db> --spaces spaces.tsv --tree tree.tsv [--copy]
   foran fga brep   --db <sample.db> --brep box.brep --node CARGO [--copy]
+  foran fga brep   --db <sample.db> --brep-dir solids/ --node CARGO [--copy]
   foran fga brep   --db <sample.db> --box 20,10,8 --node CARGO [--copy]
   foran fga import-hull --db <sample.db> --fsf TESTfsurf.fsf [--copy]
   foran fga draw   --db <sample.db> --out ga.dxf    [--copy] [--views plan,side,transv]
@@ -33,6 +34,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import foran_db as DB  # noqa: E402
+import foran_names as N  # noqa: E402
 import foran_ui as UI  # noqa: E402
 
 
@@ -333,6 +336,28 @@ def _space_rows(db: Path) -> set[tuple[int, str]]:
     finally:
         con.close()
 
+def _work_area_nodes(db: Path) -> set[str]:
+    """Names of the Ship root (TYPE=1) and work-area nodes (TYPE=2)."""
+    con = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
+    try:
+        return {str(r[0]) for r in
+                con.execute("select NAME from DSG_SPC_TREE where TYPE in (1,2)")}
+    finally:
+        con.close()
+
+
+def _solid_sections_info(db: Path):
+    """(count, xmin, xmax) of the project's solid-hull sections, or None."""
+    con = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
+    try:
+        row = con.execute(
+            "select count(*), min(X), max(X) from DSG_SOLID_HULL_SECTIONS").fetchone()
+        return row if row and row[0] else None
+    except sqlite3.Error:
+        return None
+    finally:
+        con.close()
+
 
 def _file_dialog_choose(G, file: Path, title: str = "Import spaces file") -> bool:
     """Choose `file` in FGA's `Import spaces file` / `Import surfaces file` dialog.
@@ -345,7 +370,8 @@ def _file_dialog_choose(G, file: Path, title: str = "Import spaces file") -> boo
     if win is None:
         return False
     hwnd = win["hwnd"]
-    G._focus(hwnd)
+    if not G.ensure_foreground(hwnd, title):
+        return False
     pyautogui = __import__("pyautogui")
     # 1) file-type filter (the ComboBox next to the "Files of type:" label)
     combo = None
@@ -417,6 +443,75 @@ def _file_dialog_choose(G, file: Path, title: str = "Import spaces file") -> boo
     return False
 
 
+def _import_one_space(G, win, cx: int, cy: int, local_file: Path,
+                      set_active: bool) -> tuple[bool, str]:
+    """New space -> Imported -> file -> Save & Exit for one solid."""
+    import pyautogui
+
+    if not G.ensure_foreground(win["hwnd"], "FGA"):
+        return False, "FGA is not in the foreground; aborting before clicking"
+    pyautogui.click(cx, cy)
+    time.sleep(0.7)
+    if set_active:
+        # Set active (context menu item 10)
+        pyautogui.click(cx, cy, button="right")
+        time.sleep(1.1)
+        for _ in range(11):
+            pyautogui.press("down")
+            time.sleep(0.07)
+        pyautogui.press("enter")
+        time.sleep(1.2)
+    # New space (context menu item 12)
+    pyautogui.click(cx, cy, button="right")
+    time.sleep(1.1)
+    for _ in range(13):
+        pyautogui.press("down")
+        time.sleep(0.07)
+    pyautogui.press("enter")
+    time.sleep(3.0)
+    # Imported tab + green +
+    try:
+        G._app_window(win["hwnd"], "uia").child_window(
+            title="Imported", control_type="TabItem").click_input()
+    except Exception:  # noqa: BLE001
+        return False, "Imported tab not found"
+    time.sleep(1.2)
+    _save_btn, plus_btn = _space_panel_buttons(win["hwnd"])
+    if plus_btn is not None:
+        plus_btn.click_input()
+    else:
+        print("space panel '+' not exposed; using coordinates", file=sys.stderr)
+        pyautogui.click(470, 710)
+    time.sleep(2.5)
+    if not _file_dialog_choose(G, local_file):
+        return False, "could not choose the file in `Import spaces file`"
+    # Large BREP solids can take a while to tessellate.
+    time.sleep(30)
+    err = next((w for w in G.windows() if w.get("title") == "Error"), None)
+    if err is not None:
+        try:
+            d2 = G._app_window(err["hwnd"], "uia")
+            txt = " | ".join(c.window_text()
+                             for c in d2.descendants(control_type="Text")
+                             if c.window_text())
+        except Exception:  # noqa: BLE001
+            txt = "(no text)"
+        return False, f"import error: {txt}"
+    # Save & Exit
+    save_btn, _plus = _space_panel_buttons(win["hwnd"])
+    if save_btn is not None:
+        try:
+            save_btn.click_input()
+        except Exception:  # noqa: BLE001
+            pyautogui.click(14, 710)
+    else:
+        print("space panel 'Save & Exit' not exposed; using coordinates",
+              file=sys.stderr)
+        pyautogui.click(14, 710)
+    time.sleep(3)
+    return True, ""
+
+
 def cmd_brep(a) -> int:
     global G
     """Import a closed BREP/STEP/IGES solid as a new FGA space.
@@ -435,8 +530,8 @@ def cmd_brep(a) -> int:
         print("refusing to write the original database: pass --copy or --in-place.",
               file=sys.stderr)
         return 2
-    if not a.brep and not a.box:
-        raise SystemExit("give --brep <file> or --box L,W,H[,X,Y,Z]")
+    if not a.brep and not a.box and not getattr(a, "brep_dir", None):
+        raise SystemExit("give --brep <file>, --brep-dir <dir> or --box L,W,H[,X,Y,Z]")
     if a.box:
         try:
             vals = [float(v) for v in a.box.split(",")]
@@ -461,12 +556,30 @@ def cmd_brep(a) -> int:
         gmsh.write(str(src))
         gmsh.finalize()
         print(f"box      : {l}x{w}x{h} at ({ox},{oy},{oz}) -> {src}")
+        sources = [src]
+    elif a.brep:
+        sources = [Path(a.brep).expanduser().resolve()]
     else:
-        src = Path(a.brep).expanduser().resolve()
-    if not src.is_file():
-        raise SystemExit(f"BREP/STEP/IGES file not found: {src}")
-    if src.suffix.lower() not in (".brep", ".stp", ".step", ".igs", ".iges"):
-        raise SystemExit("supported formats: .brep .stp .step .igs .iges")
+        in_dir = Path(a.brep_dir).expanduser().resolve()
+        if not in_dir.is_dir():
+            raise SystemExit(f"--brep-dir not found: {in_dir}")
+        sources = sorted(p for p in in_dir.iterdir()
+                         if p.is_file() and p.suffix.lower() in
+                         (".brep", ".stp", ".step", ".igs", ".iges"))
+        if not sources:
+            raise SystemExit(f"no .brep/.step/.iges files in {in_dir}")
+    for src in sources:
+        if not src.is_file():
+            raise SystemExit(f"BREP/STEP/IGES file not found: {src}")
+        if src.suffix.lower() not in (".brep", ".stp", ".step", ".igs", ".iges"):
+            raise SystemExit(f"unsupported format: {src} "
+                             f"(use .brep .stp .step .igs .iges)")
+        if src.suffix.lower() != ".brep" and not a.allow_step:
+            print(f"refusing STEP/IGES ({src.name}): in tests FGA imported such a "
+                  "solid with volume=0 (DSG_SPC_PROPS all zero), while the same "
+                  "solid as .brep worked. Export .brep instead, or pass "
+                  "--allow-step to try anyway.", file=sys.stderr)
+            return 2
 
     running = [w for w in G.windows("fga") if w.get("process", "").lower() == "fga.exe"
                or w.get("title", "").startswith("fga -")]
@@ -479,13 +592,25 @@ def cmd_brep(a) -> int:
         time.sleep(2)
 
     db = _prepare_db(a)
+    nodes = _work_area_nodes(db)
+    if a.node not in nodes:
+        print(f"work-area node {a.node!r} not found in DSG_SPC_TREE. Create it in "
+              f"FGA (Surface tree: right-click Ship > New node), or pass --node. "
+              f"Existing: {', '.join(sorted(nodes))}", file=sys.stderr)
+        return 2
     before = _space_rows(db)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = Path.cwd() / "_foran_work" / "fga" / f"brep_{stamp}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    # Keep a copy of the solid in FGA's workdir so the import dialog lists it.
-    local_file = run_dir / src.name
-    shutil.copy2(src, local_file)
+    src_dir = run_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    # Keep a dot-free copy of each solid in FGA's workdir so the import
+    # dialog lists it (FORAN parses the extension from the first dot).
+    local_files = []
+    for i, src in enumerate(sources, 1):
+        local = run_dir / f"space_{stamp}_{i}{src.suffix.lower()}"
+        shutil.copy2(src, local)
+        local_files.append(local)
+    print(f"solids   : {len(local_files)} file(s)")
     import foran_launch as L
     rc = L.main(["fga", "--workdir", str(run_dir)])
     if rc:
@@ -521,69 +646,14 @@ def cmd_brep(a) -> int:
         _close_fga(G)
         return 1
     cx, cy = (node.left + node.right) // 2, (node.top + node.bottom) // 2
-    pyautogui.click(cx, cy)
-    time.sleep(0.7)
-    # 2) Set active (context menu item 10)
-    pyautogui.click(cx, cy, button="right")
-    time.sleep(1.1)
-    for _ in range(11):
-        pyautogui.press("down")
-        time.sleep(0.07)
-    pyautogui.press("enter")
-    time.sleep(1.2)
-    # 3) New space (context menu item 12)
-    pyautogui.click(cx, cy, button="right")
-    time.sleep(1.1)
-    for _ in range(13):
-        pyautogui.press("down")
-        time.sleep(0.07)
-    pyautogui.press("enter")
-    time.sleep(3.0)
-    # 4) Imported tab + green +
-    try:
-        d.child_window(title="Imported", control_type="TabItem").click_input()
-    except Exception:  # noqa: BLE001
-        print("Imported tab not found", file=sys.stderr)
-        _close_fga(G)
-        return 1
-    time.sleep(1.2)
-    _save_btn, plus_btn = _space_panel_buttons(win["hwnd"])
-    if plus_btn is not None:
-        plus_btn.click_input()
-    else:
-        print("space panel '+' not exposed; using coordinates", file=sys.stderr)
-        pyautogui.click(470, 710)
-    time.sleep(2.5)
-    if not _file_dialog_choose(G, local_file):
-        print("could not choose the file in `Import spaces file`", file=sys.stderr)
-        _close_fga(G)
-        return 1
-    # Large BREP/STEP solids can take a while to tessellate; give the import
-    # enough time before Save & Exit.
-    time.sleep(30)
-    err = next((w for w in G.windows() if w.get("title") == "Error"), None)
-    if err is not None:
-        try:
-            d2 = G._app_window(err["hwnd"], "uia")
-            txt = " | ".join(c.window_text() for c in d2.descendants(control_type="Text")
-                             if c.window_text())
-            print(f"import error: {txt}", file=sys.stderr)
-        except Exception:  # noqa: BLE001
-            pass
-        _close_fga(G)
-        return 1
-    # 5) Save & Exit, then close FGA and save the project
-    save_btn, _plus = _space_panel_buttons(win["hwnd"])
-    if save_btn is not None:
-        try:
-            save_btn.click_input()
-        except Exception:  # noqa: BLE001
-            pyautogui.click(14, 710)
-    else:
-        print("space panel 'Save & Exit' not exposed; using coordinates",
-              file=sys.stderr)
-        pyautogui.click(14, 710)
-    time.sleep(3)
+    done = 0
+    for idx, local_file in enumerate(local_files, 1):
+        print(f"space    : {idx}/{len(local_files)} {local_file.name}")
+        ok, msg = _import_one_space(G, win, cx, cy, local_file, set_active=(idx == 1))
+        if not ok:
+            print(msg, file=sys.stderr)
+            break
+        done += 1
     _close_fga(G)
     time.sleep(2)
 
@@ -593,6 +663,9 @@ def cmd_brep(a) -> int:
         print("imported : " + ", ".join(f"{name} (OID {oid})" for oid, name in new))
     else:
         print("no new space appeared in DSG_SPC_TREE", file=sys.stderr)
+        return 1
+    if done != len(local_files):
+        print(f"only {done}/{len(local_files)} solid(s) imported", file=sys.stderr)
         return 1
     return 0
 
@@ -959,6 +1032,15 @@ def cmd_import_hull(a) -> int:
     print(f"surface  : External hull patches {before_n} -> {after_n}")
     if after_n > 0:
         print("patches  : " + ", ".join(after_names))
+    sec = _solid_sections_info(db)
+    if sec:
+        print(f"sections : solid hull still {sec[0]} sections, "
+              f"x={sec[1]:.2f}..{sec[2]:.2f} (not rebuilt)")
+        print("NOTE: `import-hull` replaces only the FGA surfaces. "
+              "DSG_SOLID_HULL_SECTIONS / DSG_HYD_CALC_DATA still describe the "
+              "previous hull, so FBASIC hydrostatics and stability will keep "
+              "using the OLD length/coefficients until you rebuild them "
+              "(e.g. FBASIC WH with a closed hull space).", file=sys.stderr)
     if not saved or after_n <= 0:
         return 1
     if line_snap and not a.no_restore_lines:
@@ -1075,6 +1157,37 @@ def cmd_draw(a) -> int:
         return 1
 
     panel = _drawing_panel(G, win["hwnd"])
+    if getattr(a, "dump_panel", False):
+        if panel is None:
+            print("2D draw panel not found", file=sys.stderr)
+        else:
+            for label in [v.strip() for v in a.views.split(",") if v.strip()]:
+                btn = {"plan": "Plan", "side": "Side", "transv": "Transv."}.get(label)
+                if btn:
+                    _click_button(G, win["hwnd"], btn, panel="2D draw")
+                    time.sleep(2.0)
+            for c in panel.descendants():
+                try:
+                    r = c.rectangle()
+                    extra = ""
+                    try:
+                        extra += f" toggle={c.iface_toggle.CurrentToggleState}"
+                    except Exception:  # noqa: BLE001
+                        pass
+                    try:
+                        extra += f" value={c.iface_value.CurrentValue!r}"
+                    except Exception:  # noqa: BLE001
+                        pass
+                    print(f"{c.element_info.control_type:14} "
+                          f"{c.window_text()!r:40} "
+                          f"({r.left},{r.top},{r.right},{r.bottom}){extra}")
+                except Exception:  # noqa: BLE001
+                    pass
+            print("--- windows ---")
+            for w in G.windows():
+                print(f"0x{w['hwnd']:x} {w.get('class')!r} {w.get('title')!r}")
+        _close_fga(G)
+        return 0
     name = a.name
     try:
         edits = panel.descendants(control_type="Edit")
@@ -1202,11 +1315,7 @@ def _prepare_db(a) -> Path:
     if not db.is_file():
         raise SystemExit(f"database not found: {db}")
     if a.copy:
-        dest_dir = Path.cwd() / "_foran_work" / "projects"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / db.name
-        if not dest.exists() or dest.stat().st_mtime < db.stat().st_mtime:
-            shutil.copy2(db, dest)
+        dest = DB.copy_for_work(db, Path.cwd() / "_foran_work" / "projects")
         print(f"database copy: {dest}")
         return dest
     print("note: opening the database in place; use --copy to work on a copy")
@@ -1249,8 +1358,12 @@ def main(argv=None) -> int:
     p = sub.add_parser("brep", help="import a closed BREP/STEP/IGES solid as a new space")
     p.add_argument("--db", required=True, help="FORAN project .db")
     p.add_argument("--brep", help="solid file: .brep/.stp/.step/.igs/.iges")
+    p.add_argument("--brep-dir",
+                   help="import every .brep in this folder in one FGA session")
     p.add_argument("--box", help="generate a box BREP first: L,W,H[,X,Y,Z] (needs gmsh)")
     p.add_argument("--node", default="CARGO", help="work-area node name (default CARGO)")
+    p.add_argument("--allow-step", action="store_true",
+                   help="try a STEP/IGES file even though tests give volume=0")
     p.add_argument("--copy", action="store_true", help="open a copy in _foran_work/projects")
     p.add_argument("--in-place", action="store_true")
     p.add_argument("--close-existing", action="store_true")
@@ -1279,6 +1392,8 @@ def main(argv=None) -> int:
     p.add_argument("--name", help="drawing name (default: the panel's DRAW-000N)")
     p.add_argument("--views", default="plan,side,transv",
                    help="comma list of plan,side,transv (default all)")
+    p.add_argument("--dump-panel", action="store_true",
+                   help="print the 2D draw dialog's UIA controls and exit")
     p.add_argument("--copy", action="store_true", help="open a copy in _foran_work/projects")
     p.add_argument("--in-place", action="store_true",
                    help="write the GA drawing into the original DB (not recommended)")

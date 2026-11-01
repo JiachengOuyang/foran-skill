@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import foran_db as DB  # noqa: E402
 import foran_fbasic as FB  # noqa: E402
 
 CLI = Path(__file__).resolve().parent / "foran_cli.py"
@@ -49,11 +50,7 @@ def _run(args: list[str]) -> subprocess.CompletedProcess:
 def _prepare_copy(db: Path, copy: bool) -> Path:
     if not copy:
         return db
-    dest_dir = Path.cwd() / "_foran_work" / "projects"
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / db.name
-    if not dest.exists() or dest.stat().st_mtime < db.stat().st_mtime:
-        shutil.copy2(db, dest)
+    dest = DB.copy_for_work(db, Path.cwd() / "_foran_work" / "projects")
     print(f"database copy: {dest}")
     return dest
 
