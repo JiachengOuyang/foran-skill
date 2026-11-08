@@ -91,6 +91,30 @@ $S fbasic wh --db <db副本> --space SPC-0003 --build
 
 > 开放壳（`makeSolid=False`）不要直接 `Build WH`：会删掉原主船体实体且不生成新实体。
 
+### 4.1.1 从闭合外板实体建 WH（换船实战，2026-11-08）
+
+项目库里的 WH 仍是旧船、需要换成外部生成的新船体时，走“闭合实体 → FGA space → WH Method=Spaces”：
+
+1. 生成闭合外板实体（gmsh/OCC 等），范围 AP–FP、z=0–D；顶面用平甲板封口，首尾端面为平面。实体体积要先用 OCC/网格核对。
+2. `foran fga brep --db <db> --brep hull.brep --node HULL --in-place`
+   - 船体外壳空间可以放在 `HULL` 下；`Space selection` 现在会依次展开 `CARGO` / `HULL` / `Ship` 查找。
+3. `foran fbasic wh --db <db> --space SPC-0006 --build`
+   - `--space` 会把现有 `SOLID-01` 的 Method 切到 `Spaces`；
+   - 不加 `--space` 则沿用现有 Method 直接 Build（只重建、不换 Method 时用）。
+4. 保存后校验：`DSG_SOLID_HULL_SECTIONS` 有行，`DSG_SOLID_MAIN_BODY_DATA.SPC_TREE_OID` 指向新空间，`DSG_SOLID_DIR` 出现新的 WH 实体。
+
+实测规模与时间（7.3 MB BREP、176 个放样截面、97 个船体剖面）：
+
+- FGA 导入约 12 min；
+- WH + 默认剖面约 35 min，期间有 `Please wait`，不要点 Ok；
+- 导入/建 WH 期间进程可能长时间占 CPU，属正常。
+
+注意：
+
+- **导入/建 WH 不会自动更新项目主数据**。Lpp/B/D/T 仍在 `DSG_OPTIONS_VALUES`（`LengthBetweenPP` / `DesignBreadth` / `DesignDraught` / `DesignDepth`）；不改的话静水力仍按旧 Lpp/B 算 Cb，并可能反复弹 “ship bounding box smaller than the ship's profile”。
+- 该警告的另一个来源：主数据 `XMin/XMax` 还是 WH 的 AP–FP，而 FSURF 的 PROFILE 含首尾悬伸。按警告里给出的 `Profile Xmin/Xmax` 改 `XMin/XMax`，警告消失；不影响已有静水力结果。
+- WH 实体只到 AP–FP，水上首尾悬伸未建模；设计吃水静水力不受影响，大倾角只作趋势。
+
 ### 4.2 附体（Appendages）
 
 - 螺旋桨：`New Propellers`；`Type` = `Diameter` 或 `Volume`；定位 `X-Position`、`Abscissa of minimum height`、`Minimum height`。
@@ -201,6 +225,8 @@ $S fbasic hydro --db <db副本> --calc HYD-CALC-01
 
 自动打开已有 `HYD-CALC-*` → `Calculate` → 等 `Please wait` 真正结束（约 1–2 分钟/60 水线）→ `Ok` → `File > Save`，并打印 `DSG_HYD_RESULTS` 中 9.83 m 行。实测副本 58 行：41,432.117 t / 40,421.578 m³ / Cb 0.8301 / KM_T 11.6409。
 
+**主数据与包围盒（2026-11-08 实测）**：`HYD-CALC` 的 Lpp/B/T 来自 `DSG_HYD_CALC_DATA`，建算例时从项目主数据复制；换船后只重算、不更新主数据，结果表的 Cb/系数仍是旧口径。先改 `Tools > project`（或 `DSG_OPTIONS_VALUES`）再 `fbasic hydro --calc ...`。包围盒警告不影响计算，但每次启动都会弹；按 §4.1.1 改 `XMin/XMax`。
+
 **全链路一条命令**：
 
 ```bash
@@ -248,6 +274,9 @@ $S fbasic cross --db <db副本> --displacements 20000,30000,40000,50000,60000
 - `Ok` → `File > Save`，实测 `DSG_KNS_CALC_RESULT` 357 行。
 
 注意：`DSG_KNS_CALC_RESULT.DISP` 是**型体积 m³**（×1.025 = 吨）；UI 表里 20000 t 行的 `4.915` 是吃水，不是 KN。
+
+**结果网格（2026-11-08 实测）**：即使面板只填 5 个排水量，FBASIC 也会为每个横倾角输出 51 个平衡排水量（约覆盖 5%–100% 船体体积），不是只算 5 行；`DSG_KNS_CALC_RESULT.DISP` 是型体积 m³（×1.025 = 吨）。按体积插值取需要的排水量即可；输入值仍保留在面板里，可回读确认。
+
 5. 输出：右键 `Export`（xlsx）；`Report`（fds）；`Plot`（dxf/pdf 横截曲线图）。
 
 ### 5.4 浸水分析（Flooding analysis）
@@ -321,6 +350,8 @@ $S fbasic capacity --db <db副本> --spaces SPC-0002,SPC-0003 --levels 15 --spac
 - `Spaces` 的 `+` 打开 `Spaces selection`：**最大化后右下角才有 OK**，点 `Expand` 展开 CARGO，勾选 SPC 后 OK；
 - `Calculate` 的 `Please wait` 到 100% 后不会自动关，自动化会聚焦对话框、扫描绿色进度条，≥90% 时点 `Close`；
 - 实测 `DSG_CT_DATA` 1 行、`DSG_CT_SPACES` 2 行。
+
+**结果写库范围（2026-11-08 实测）**：`fbasic capacity` 只把输入写进 `DSG_CT_DATA` / `DSG_CT_SPACES`（levels/spacing/density 和舱室列表），逐层数值没有落到关系表；需要数值表时用面板 `Export`，或继续用 FGA/独立积分的结果。
 
 ### 5.9 测深（Sounding）
 
@@ -477,6 +508,11 @@ $S fbasic lc --db <db副本> --lsw LSW-02 [--load 32792,95,8]
 6. **单位**：Power predict 等处 m/mm 混用会差 1000 倍。
 7. **报告模板**：MARPOL 要选 `Mpl12A_doc.fpl` / `Mpl23_doc.fpl`。
 8. **不同版本 vs V80R3.0**：字段名可能略有差异；以本机界面/帮助为准。
+
+9. **默认剖面确认框标题可能是 `Question`**：点 `Sections` 后弹 “Do you want to calculate the default sections?”，窗口标题不一定是 Information/Warning。自动化只按标题白名单找会漏掉，模态框一直挡着，后面的 Ok/Save 全部失败；按文本内容找，并轮询到对话框消失。
+10. **大实体导入/建 WH 很慢**：>5 MB BREP 可能十几分钟，WH 默认剖面可能半小时以上；`Please wait` 期间不要点 Ok。CLI 超时后进程可能留在前台，手动点 Ok/Save 仍可保存。
+11. **pyautogui fail-safe**：鼠标在屏幕角落时点击会抛 `FailSafeException`，FBASIC 可能报 `Unknown Exception: Terminating!`。跑 KN/长任务前把鼠标移到屏幕中间，不要关闭 fail-safe。
+12. **HULL 下的空间**：`Space selection` 默认只展开 CARGO；船体外壳空间常放在 HULL 下，找不到时依次展开 CARGO/HULL/Ship。
 
 ## 10. 自动化导航（脚本，2026-10-28）
 

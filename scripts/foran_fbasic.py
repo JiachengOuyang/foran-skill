@@ -503,17 +503,22 @@ def _add_space(G, hwnd: int, name: str) -> bool:
     d = G._app_window(win["hwnd"], "uia")
     target = _tree_rect(d, name)
     if target is None:
-        cargo = _tree_rect(d, "CARGO")
-        if cargo is not None:
-            pyautogui.click(int(cargo.left) + 10,
-                            (int(cargo.top) + int(cargo.bottom)) // 2)
+        # The space may sit under CARGO (holds) or HULL / Ship (envelope).
+        for node_name in ("CARGO", "HULL", "Ship"):
+            node = _tree_rect(d, node_name)
+            if node is None:
+                continue
+            pyautogui.click(int(node.left) + 10,
+                            (int(node.top) + int(node.bottom)) // 2)
             time.sleep(0.6)
             pyautogui.press("right")
             time.sleep(1.0)
             # Re-open the UIA tree: the Qt accessibility cache may still show
-            # CARGO as collapsed right after expanding it.
+            # the node as collapsed right after expanding it.
             d = G._app_window(win["hwnd"], "uia")
             target = _tree_rect(d, name)
+            if target is not None:
+                break
     if target is None:
         print(f"{name} not listed in Space selection", file=sys.stderr)
         for c in d.descendants(control_type="Button"):
@@ -607,7 +612,10 @@ def _click_btn(ctrl) -> bool:
 
 def _answer_information(G, contains: str, answer: str = "Yes") -> bool:
     for w in G.windows():
-        if w.get("title") not in ("Information", "Warning", "Please confirm..."):
+        title = (w.get("title") or "").strip()
+        # Confirmation prompts may be titled `Question` (not just
+        # Information/Warning); skip only the module's own main window.
+        if not title or title.lower().startswith(("fbasic", "fga", "fsurf", "fdm")):
             continue
         try:
             d = G._app_window(w["hwnd"], "uia")
@@ -662,7 +670,16 @@ def _build_wh(G, hwnd: int, db: Path, timeout: float) -> bool:
         print("Sections click failed", file=sys.stderr)
         return False
     time.sleep(1.5)
-    _answer_information(G, "calculate the default sections", "Yes")
+    # The confirmation may be titled `Question`, so retry for a while instead
+    # of a single lookup (a missed prompt leaves a modal that blocks the save).
+    answered = False
+    end = time.time() + 20
+    while time.time() < end:
+        if _answer_information(G, "calculate the default sections", "Yes"):
+            answered = True
+            break
+        time.sleep(0.5)
+    print(f"prompt   : default sections {'Yes' if answered else 'not shown'}")
     end = time.time() + timeout
     while time.time() < end:
         if not _please_wait(G):
@@ -675,10 +692,17 @@ def _build_wh(G, hwnd: int, db: Path, timeout: float) -> bool:
     if ok is None or not _click_btn(ok):
         print("panel Ok not found", file=sys.stderr)
         return False
-    time.sleep(4)
+    time.sleep(5)
     G._focus(hwnd)
-    time.sleep(0.4)
-    return _save_and_wait(db, hwnd)
+    time.sleep(0.5)
+    saved = _save_and_wait(db, hwnd)
+    if not saved:
+        # A late modal can still own the foreground; settle and retry once.
+        _settle_warnings(G, timeout=6.0)
+        G._focus(hwnd)
+        time.sleep(0.5)
+        saved = _save_and_wait(db, hwnd)
+    return saved
 
 
 def _open_hydro_calc(G, hwnd: int, name: str | None = None) -> str | None:
@@ -2929,9 +2953,7 @@ def cmd_wh(a) -> int:
             return 1
     if a.build:
         if not a.space:
-            print("--build needs --space", file=sys.stderr)
-            _close(G)
-            return 2
+            print("build    : using the existing Method (no --space given)")
         before = _solid_info(db)
         print(f"before   : solids={before[0]}, hull_sections={before[1]}")
         if not _build_wh(G, win["hwnd"], db, a.timeout):
@@ -2963,9 +2985,11 @@ def main(argv=None) -> int:
     p.add_argument("--copy", action="store_true", help="open a copy in _foran_work/projects")
     p.add_argument("--in-place", action="store_true",
                    help="write the original DB (not recommended)")
-    p.add_argument("--space", help="select this space under Method=Spaces (e.g. SPC-0003)")
+    p.add_argument("--space", help="select this space under Method=Spaces (e.g. SPC-0003); "
+                                   "omit with --build to keep the current Method")
     p.add_argument("--build", action="store_true",
-                   help="Build WH, calculate default sections, Ok and File Save")
+                   help="Build WH, calculate default sections, Ok and File Save "
+                        "(keeps the existing Method if --space is omitted)")
     p.add_argument("--timeout", type=float, default=300.0,
                    help="Build WH / sections timeout in seconds")
     p.add_argument("--keep-open", action="store_true")
