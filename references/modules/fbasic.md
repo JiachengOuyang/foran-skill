@@ -111,6 +111,7 @@ $S fbasic wh --db <db副本> --space SPC-0003 --build
 
 注意：
 
+- `foran fga import-hull` 只替换 FGA 曲面，不重建 WH，也不更新 `DSG_SOLID_HULL_SECTIONS` / `DSG_HYD_CALC_DATA`；导入后要接着 `fbasic wh --space ... --build`。
 - **导入/建 WH 不会自动更新项目主数据**。Lpp/B/D/T 仍在 `DSG_OPTIONS_VALUES`（`LengthBetweenPP` / `DesignBreadth` / `DesignDraught` / `DesignDepth`）；不改的话静水力仍按旧 Lpp/B 算 Cb，并可能反复弹 “ship bounding box smaller than the ship's profile”。
 - 该警告的另一个来源：主数据 `XMin/XMax` 还是 WH 的 AP–FP，而 FSURF 的 PROFILE 含首尾悬伸。按警告里给出的 `Profile Xmin/Xmax` 改 `XMin/XMax`，警告消失；不影响已有静水力结果。
 - WH 实体只到 AP–FP，水上首尾悬伸未建模；设计吃水静水力不受影响，大倾角只作趋势。
